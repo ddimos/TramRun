@@ -2,15 +2,13 @@
 
 namespace tr
 {
+    class Servo final
+    {
+    public:
+        Servo();
+        ~Servo();
 
-class Servo final
-{
-public:
-    Servo();
-    ~Servo();
-
-    void init();
-    void rotate(int _angleDeg);
-};
-
+        void init();
+        void rotate(int _angleDeg);
+    };
 } // namespace tr

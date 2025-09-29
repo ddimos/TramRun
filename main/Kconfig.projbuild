@@ -1,0 +1,7 @@
+menu "TramRun Configuration"
+    config TR_SERVO_PULSE_GPIO
+        int "Servo GPIO"
+        default 0
+        help
+            GPIO connects to the PWM signal line
+endmenu

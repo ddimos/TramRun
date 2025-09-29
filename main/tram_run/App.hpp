@@ -1,6 +1,7 @@
 #pragma once
 
 #include "tram_run/Display.hpp"
+#include "tram_run/Servo.hpp"
 
 namespace tr
 {
@@ -31,6 +32,7 @@ private:
     State m_state = State::Starting;
 
     Display m_display;
+    Servo m_servo;
 };
 
 } // namespace tr

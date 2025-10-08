@@ -1,15 +1,25 @@
 #pragma once
+#include <stdint.h>
 
-namespace tr
+namespace tr::display
 {
-    class Display final
+    constexpr unsigned MaxTextLength = 16;
+    struct Event
     {
-    public:
-        Display();
-        ~Display();
-
-        void init();
-        void drawText(const char* _text, int _length, int _pos);
-        void clear();
+        enum class Type : uint8_t
+        {
+            Clear,
+            Draw,
+            DrawAndClear
+        };
+        const char* text;
+        uint8_t pos = 0;
+        uint8_t length = 0;
+        Type type = Type::Clear;
     };
-} // namespace tr
+
+    void init();
+    void deinit();
+    void sendEvent(const Event& _event);
+
+} // namespace tr::display

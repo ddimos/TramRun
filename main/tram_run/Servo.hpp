@@ -1,14 +1,15 @@
 #pragma once
+#include <stdint.h>
 
-namespace tr
+namespace tr::servo
 {
-    class Servo final
+    struct Event
     {
-    public:
-        Servo();
-        ~Servo();
-
-        void init();
-        void rotate(int _angleDeg);
+        uint8_t desiredRotationDeg = 0;
     };
-} // namespace tr
+
+    void init();
+    void deinit();
+    void sendEvent(Event _event);
+
+} // namespace tr::servo

@@ -1,20 +1,12 @@
 #pragma once
 
-#include "tram_run/Display.hpp"
-#include "tram_run/Servo.hpp"
+#include "tram_run/State.hpp"
 
 namespace tr
 {
     class App final
     {
     public:
-        enum class State
-        {
-            Starting,
-            //ConnectingToWifi,
-            Run
-
-        };
 
         App();
         ~App();
@@ -23,15 +15,19 @@ namespace tr
 
     private:
         static void mainTask(void* _pvParameter);
-        static void displayTask(void* _pvParameter);
-        static void servoTask(void* _pvParameter);
         //static void buttonTask(void* _pvParameter);
 
-        State getStateSafe() const;
+        state::Id getStateSafe() const;
 
-        State m_state = State::Starting;
+        void transit(state::Transit _transit);
+        void transitInitState(state::Transit _transit);
+        void transitRunState(state::Transit _transit);
 
-        Display m_display;
-        Servo m_servo;
+        void update();
+        state::Status updateInitState();
+        state::Status updateRunState();
+
+        state::Id m_state = state::Id::Init;
     };
+
 } // namespace tr

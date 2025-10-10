@@ -1,20 +1,25 @@
 #include "App.hpp"
 
 #include "tram_run/Display.hpp"
+#include "tram_run/Input.hpp"
 #include "tram_run/Servo.hpp"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-#include "esp_err.h"
+#include "esp_log.h"
 
 namespace
 {
+    static const char* TAG = "TR_APP";
+
     const char* INIT_TEXT = "Init";
     const char* RUN_TEXT = "Run";
+
+    constexpr gpio_num_t ButtonGpio = GPIO_NUM_19;
 } // namespace
 
-namespace tr
+namespace tr::app
 {
     App::App() = default;
     App::~App() = default;
@@ -24,13 +29,23 @@ namespace tr
         // TODO make the stack size smaller by measuring the watermark
 
         display::init();
+        input::init(
+            ButtonGpio,
+            [this](){
+                this->onButtonPress();
+            },
+            [this](){
+                this->onButtonLongPress();
+            }
+        );
         servo::init();
 
+        configASSERT(m_queue == nullptr);
+        m_queue = xQueueCreate(5, sizeof(Event));
+        configASSERT(m_queue != nullptr);
+
         BaseType_t ret = xTaskCreate(&mainTask, "mainTask", 2048, this, 6, NULL);
-        if (ret != pdPASS)
-        {
-            ESP_ERROR_CHECK(ESP_FAIL);
-        }
+        configASSERT(ret == pdPASS);
     }
 
     void App::mainTask(void* _pvParameter)
@@ -45,6 +60,13 @@ namespace tr
     
         while (true)
         {
+            Event event;
+            while (xQueueReceive(app.m_queue, &event, 0))
+            {
+                ESP_LOGI(TAG, "Handling %d ", (int)event.type);
+                // app.dispatch(event);
+            }
+
             app.update();
             vTaskDelayUntil( &xLastWakeTime, xFrequency );
         }
@@ -142,6 +164,7 @@ namespace tr
         --ii;
         if (ii < 0)
         {
+            ii = 5;
             status = state::Status(state::Id::Run);
         }
         return status;
@@ -155,10 +178,25 @@ namespace tr
         --ii;
         if (ii < 0)
         {
+            ii = 7;
             status = state::Status(state::Id::Init);
         }
 
         return status;
     }
 
-} // namespace tr
+    void App::onButtonPress()
+    {
+        Event event;
+        event.type = Event::Type::ButtonPress;
+        xQueueSend(m_queue, &event, portMAX_DELAY);
+    }
+
+    void App::onButtonLongPress()
+    {
+        Event event;
+        event.type = Event::Type::ButtonLongPress;
+        xQueueSend(m_queue, &event, portMAX_DELAY);
+    }
+
+} // namespace tr::app

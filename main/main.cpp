@@ -9,7 +9,7 @@ namespace
     static const char* TAG = "TR_MAIN";
 }
 
-tr::App g_app;
+tr::app::App g_app;
 
 extern "C" void app_main(void)
 {

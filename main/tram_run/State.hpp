@@ -7,7 +7,7 @@ namespace tr::state
     enum class Id : uint8_t
     {
         Init,
-        //ConnectingToWifi,
+        ConnectingToWifi,
         Run
 
     };

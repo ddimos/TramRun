@@ -3,17 +3,21 @@
 #include "tram_run/Display.hpp"
 #include "tram_run/Input.hpp"
 #include "tram_run/Servo.hpp"
+#include "tram_run/Wifi.hpp"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
+#include "esp_system.h"
 #include "esp_log.h"
+#include "esp_wifi.h"
 
 namespace
 {
     static const char* TAG = "TR_APP";
 
     const char* INIT_TEXT = "Init";
+    const char* WIFI_TEXT = "Wifi";
     const char* RUN_TEXT = "Run";
 
     constexpr gpio_num_t ButtonGpio = GPIO_NUM_19;
@@ -27,6 +31,22 @@ namespace tr::app
     void App::start()
     {
         // TODO make the stack size smaller by measuring the watermark
+
+        ESP_ERROR_CHECK(esp_netif_init());
+        ESP_ERROR_CHECK(esp_event_loop_create_default());
+
+        wifi::init(
+            [this](wifi::State _state){
+                if (_state == wifi::State::Ready)
+                    this->onWifiReady();
+                else if (_state == wifi::State::NotAbleToConnect)
+                    this->onWifiFail();
+                else
+                {
+                    configASSERT(false);
+                }
+            }
+        );
 
         display::init();
         input::init(
@@ -64,10 +84,12 @@ namespace tr::app
             while (xQueueReceive(app.m_queue, &event, 0))
             {
                 ESP_LOGI(TAG, "Handling %d ", (int)event.type);
-                // app.dispatch(event);
+                app.dispatchAndTransit(event);
             }
 
-            app.update();
+            event.type = Event::Type::Tick;
+            app.dispatchAndTransit(event);
+            
             vTaskDelayUntil( &xLastWakeTime, xFrequency );
         }
     }
@@ -84,6 +106,9 @@ namespace tr::app
         case state::Id::Init:
             transitInitState(_transit);
             break;
+            case state::Id::ConnectingToWifi:
+            transitConnectingToWifi(_transit);
+            break;
         case state::Id::Run:
             transitRunState(_transit);
             break;
@@ -94,22 +119,42 @@ namespace tr::app
     {
         switch (_transit)
         {
-        case state::Transit::Enter:
+            case state::Transit::Enter:
+                {
+                    display::Event event;
+                    event.type = display::Event::Type::DrawAndClear;
+                    event.text = INIT_TEXT;
+                    event.length = 4;
+                    display::sendEvent(event);
+                }
+                {
+                    servo::Event event;
+                    event.desiredRotationDeg = 10;
+                    servo::sendEvent(event);
+                }
+                break;
+            case state::Transit::Exit:
+                break;
+        }
+    }
+
+    void App::transitConnectingToWifi(state::Transit _transit)
+    {
+        switch (_transit)
+        {
+            case state::Transit::Enter:
             {
+                wifi::start();
+
                 display::Event event;
                 event.type = display::Event::Type::DrawAndClear;
-                event.text = INIT_TEXT;
+                event.text = WIFI_TEXT;
                 event.length = 4;
                 display::sendEvent(event);
+                break;
             }
-            {
-                servo::Event event;
-                event.desiredRotationDeg = 10;
-                servo::sendEvent(event);
-            }
-            break;
-        case state::Transit::Exit:
-            break;
+            case state::Transit::Exit:
+                break;
         }
     }
 
@@ -117,70 +162,97 @@ namespace tr::app
     {
         switch (_transit)
         {
-        case state::Transit::Enter:
-            {
-                display::Event event;
-                event.type = display::Event::Type::DrawAndClear;
-                event.text = RUN_TEXT;
-                event.length = 3;
-                display::sendEvent(event);
-            }
-            {
-                servo::Event event;
-                event.desiredRotationDeg = 70;
-                servo::sendEvent(event);
-            }
-            break;
-        case state::Transit::Exit:
-            break;
+            case state::Transit::Enter:
+                {
+                    display::Event event;
+                    event.type = display::Event::Type::DrawAndClear;
+                    event.text = RUN_TEXT;
+                    event.length = 3;
+                    display::sendEvent(event);
+                }
+                {
+                    servo::Event event;
+                    event.desiredRotationDeg = 70;
+                    servo::sendEvent(event);
+                }
+                break;
+            case state::Transit::Exit:
+                break;
         }
     }
 
-    void App::update()
+    void App::dispatchAndTransit(const Event& _event)
     {
         state::Status status;
         switch (m_state)
         {
-        case state::Id::Init:
-            status = updateInitState();
-            break;
-        case state::Id::Run:
-            status = updateRunState();
-            break;
+            case state::Id::Init:
+                status = dispatchInitState(_event);
+                break;
+            case state::Id::ConnectingToWifi:
+                status = dispatchConnectingToWifi(_event);
+                break;
+            case state::Id::Run:
+                status = dispatchRunState(_event);
+                break;
         }
         if (status.isTransitRequested())
         {
-            // TODO ASSERT(m_state != status.nextState, "Cannot transit to the same state");
+            ESP_LOGI(TAG, "Transiting %d ", (int)status.nextState);
+            configASSERT(m_state != status.nextState);
             transit(state::Transit::Exit);
             m_state = status.nextState;
             transit(state::Transit::Enter);
         }
     }
 
-    state::Status App::updateInitState()
+    state::Status App::dispatchInitState(const Event& _event)
     {
         state::Status status;
-        static int ii = 5;
-        --ii;
-        if (ii < 0)
+
+        switch (_event.type)
         {
-            ii = 5;
-            status = state::Status(state::Id::Run);
+            case Event::Type::Tick:
+            {
+                static int ii = 5;
+                --ii;
+                if (ii < 0)
+                {
+                    ii = 5;
+                    status = state::Status(state::Id::ConnectingToWifi);
+                }
+                break;
+            }
+            default:
+                break;
         }
         return status;
     }
 
-    state::Status App::updateRunState()
+    state::Status App::dispatchConnectingToWifi(const Event& _event)
     {
         state::Status status;
-
-        static int ii = 7;
-        --ii;
-        if (ii < 0)
+        switch (_event.type)
         {
-            ii = 7;
-            status = state::Status(state::Id::Init);
+            case Event::Type::WifiReady:
+            {
+                status = state::Status(state::Id::Run);
+                break;
+            }
+            case Event::Type::WifiFail:
+            {
+                ESP_LOGE(TAG, "Unable to connect to WIFI!");
+                break;
+            }
+            default:
+                break;
         }
+        return status;
+    }
+
+    state::Status App::dispatchRunState(const Event& _event)
+    {
+        state::Status status;
 
         return status;
     }
@@ -196,6 +268,20 @@ namespace tr::app
     {
         Event event;
         event.type = Event::Type::ButtonLongPress;
+        xQueueSend(m_queue, &event, portMAX_DELAY);
+    }
+
+    void App::onWifiReady()
+    {
+        Event event;
+        event.type = Event::Type::WifiReady;
+        xQueueSend(m_queue, &event, portMAX_DELAY);
+    }
+
+    void App::onWifiFail()
+    {
+        Event event;
+        event.type = Event::Type::WifiFail;
         xQueueSend(m_queue, &event, portMAX_DELAY);
     }
 

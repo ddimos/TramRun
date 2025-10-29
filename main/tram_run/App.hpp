@@ -12,7 +12,10 @@ namespace tr::app
         enum class Type : uint8_t
         {
             ButtonPress,
-            ButtonLongPress
+            ButtonLongPress,
+            Tick,
+            WifiFail,
+            WifiReady,
         };
         Type type = Type::ButtonPress;
     };
@@ -33,14 +36,18 @@ namespace tr::app
 
         void transit(state::Transit _transit);
         void transitInitState(state::Transit _transit);
+        void transitConnectingToWifi(state::Transit _transit);
         void transitRunState(state::Transit _transit);
 
-        void update();
-        state::Status updateInitState();
-        state::Status updateRunState();
+        void dispatchAndTransit(const Event& _event);
+        state::Status dispatchInitState(const Event& _event);
+        state::Status dispatchConnectingToWifi(const Event& _event);
+        state::Status dispatchRunState(const Event& _event);
 
         void onButtonPress();
         void onButtonLongPress();
+        void onWifiReady();
+        void onWifiFail();
 
         state::Id m_state = state::Id::Init;
         QueueHandle_t m_queue = nullptr;
